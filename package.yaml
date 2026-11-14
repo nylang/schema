@@ -1,0 +1,13 @@
+name: schema
+version: 0.1.0
+license: MIT
+dependencies:
+  json:
+    git: https://github.com/nylang/json.git
+    rev: ef61eee64413ac108a63faba14eeddfe49583268
+  yaml:
+    git: https://github.com/nylang/yaml.git
+    rev: 743661819c40efcbac5248ae01eeff0cce193fa4
+directories:
+  interface: [interface]
+  private: [private, tests]
