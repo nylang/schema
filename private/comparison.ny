@@ -94,7 +94,7 @@ method(SchemaDecimal) Compare(other: ref SchemaDecimal) -> int32 {
 }
 
 method(SchemaWalk) Equal(
-  value: ref Json, expected: ref Json, position: SchemaLocation, depth: int32
+  value: ref SchemaValue, expected: ref SchemaValue, position: SchemaLocation, depth: int32
 ) -> Result<bool, SchemaError> {
   let limit = self.Visit(position, depth);
   if limit != nil {
@@ -122,15 +122,15 @@ method(SchemaWalk) Equal(
       return Ok<bool, SchemaError>(false);
     }
 
-    let items = array as JsonArray;
-    let wanted = other as JsonArray;
+    let items = array as SchemaValue;
+    let wanted = other as SchemaValue;
     if items.Len() != wanted.Len() {
       return Ok<bool, SchemaError>(false);
     }
     var i: int32 = 0;
     while i < items.Len() {
-      let item = items.Get(i) as Json;
-      let target = wanted.Get(i) as Json;
+      let item = items.ValueAt(i);
+      let target = wanted.ValueAt(i);
       let result = self.Equal(item, target, position.Instance(i.ToString()), depth + 1);
       if result.IsErr() || !(result.get_if<bool>() as bool) {
         return result;
@@ -148,20 +148,20 @@ method(SchemaWalk) Equal(
       return Ok<bool, SchemaError>(false);
     }
 
-    let entries = object as JsonObject;
-    let wanted = other as JsonObject;
+    let entries = object as SchemaValue;
+    let wanted = other as SchemaValue;
     if entries.Len() != wanted.Len() {
       return Ok<bool, SchemaError>(false);
     }
     var i: int32 = 0;
     while i < entries.Len() {
-      let key = entries.KeyAt(i) as string;
+      let key = entries.KeyAt(i);
       let target = wanted.Get(key);
       if target == nil {
         return Ok<bool, SchemaError>(false);
       }
-      let member = entries.ValueAt(i) as Json;
-      let other_member = target as Json;
+      let member = entries.ValueAt(i);
+      let other_member = target as SchemaValue;
       let result = self.Equal(member, other_member, position.Instance(key), depth + 1);
       if result.IsErr() || !(result.get_if<bool>() as bool) {
         return result;
@@ -172,11 +172,26 @@ method(SchemaWalk) Equal(
     return Ok<bool, SchemaError>(true);
   }
 
-  return Ok<bool, SchemaError>(value.Equals(copy(expected)));
+  let kind = value.Kind();
+  if kind != expected.Kind() {
+    return Ok<bool, SchemaError>(false);
+  }
+
+  if kind == SchemaKind.Null {
+    return Ok<bool, SchemaError>(true);
+  }
+
+  let left = value.Scalar();
+  let right = expected.Scalar();
+  if kind == SchemaKind.Boolean {
+    return Ok<bool, SchemaError>(left.boolean == right.boolean);
+  }
+
+  return Ok<bool, SchemaError>(left.text == right.text);
 }
 
 method(SchemaWalk) EvaluateValues(
-  value: ref Json, constraint: ref Json, name: string, position: SchemaLocation, depth: int32
+  value: ref SchemaValue, constraint: ref SchemaValue, name: string, position: SchemaLocation, depth: int32
 ) -> SchemaError? {
   if name == "const" {
     let result = self.Equal(value, constraint, position, depth + 1);
@@ -189,10 +204,10 @@ method(SchemaWalk) EvaluateValues(
     return nil;
   }
 
-  let choices = constraint.AsArray() as JsonArray;
+  let choices = constraint.AsArray() as SchemaValue;
   var i: int32 = 0;
   while i < choices.Len() {
-    let choice = choices.Get(i) as Json;
+    let choice = choices.ValueAt(i);
     let result = self.Equal(value, choice, position.Rule(i.ToString()), depth + 1);
     if result.IsErr() {
       return result.get_if<SchemaError>();
@@ -226,7 +241,7 @@ func compare_numbers(a: string, b: string, position: SchemaLocation) -> Result<i
 }
 
 func check_numeric_bound(
-  value: ref Json, rule: ref Json, name: string, position: SchemaLocation
+  value: ref SchemaValue, rule: ref SchemaValue, name: string, position: SchemaLocation
 ) -> SchemaError? {
   let raw = value.AsNumber();
   if raw == nil {

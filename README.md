@@ -1,40 +1,27 @@
-# JSON and YAML document schemas
+# Format-independent document schema
 
-Import `schema:schema.ny` from a package that declares `schema` as a dependency.
-Declare a Git dependency with the URL `https://github.com/nylang/schema.git`
-and an explicit revision, then run `nyra lock` and `nyra fetch --frozen`.
-Use the `json` and `yaml` packages to parse the schema and instance documents.
-The package uses the hosted Nyra SDK 1.1.2 runtime.
+`schema` provides a reusable validation engine for the common document data
+model. It uses the matching hosted Nyra SDK runtime. JSON and YAML applications
+can use the `JsonSchema` and `YamlSchema` entry points in their respective
+codec packages.
 
-```nyra
-import "stdlib:stdlib.ny";
-import "json:json.ny";
-import "yaml:yaml.ny";
-import "schema:schema.ny";
+A new format integrates by implementing `SchemaReader` and importing
+`schema:schema.ny`. Readers supply stable, nonzero handles for nodes, report
+array elements and string-keyed object entries in document order, and expose
+exact decimal representations for numbers. The `count` field identifies a
+nonnegative integer node representable as `uint64`.
 
-func validate_config(rule: JsonDocument, config: YamlDocument) -> Result<Unit, SchemaError> {
-  let compiled = Schema.Compile(rule.Root());
-  if compiled.IsErr() {
-    return Err<Unit, SchemaError>(compiled.get_if<SchemaError>() as SchemaError);
-  }
-
-  let schema = compiled.get_if<Schema>() as Schema;
-  return schema.ValidateYaml(config.Root());
-}
-```
-
-Call `Schema.Compile(json_document.Root())` or
-`Schema.CompileYaml(yaml_document.Root())` once and reuse the admitted value.
-Call `Validate` for a JSON instance and `ValidateYaml` for a YAML instance.
-Keep the schema's durable allocator and its callback context alive for the
-lifetime of the admitted value. YAML validation uses the types exposed by the
-YAML DOM. Quoted scalars remain strings and numeric scalars are limited to the
-parser's signed 64-bit integers.
+Call `Schema.Compile(reader)` to admit a rule and take an owned snapshot.
+The rule document and reader may be released after compilation. Reuse the
+resulting `Schema` with `Validate(reader)` to inspect another document.
+Validation reads the existing instance tree synchronously, visits only the
+nodes required by the rules, and retains neither the reader nor its handles.
+A reader must keep its underlying storage unchanged until the call returns.
 
 A failure reports its category, a diagnostic message and two JSON Pointer
 paths. `instance_path` identifies the failing value or the expected location
-of a missing property. `schema_path` identifies the applicable schema rule.
-An empty path identifies the root.
+of a missing property. `schema_path` identifies the applicable rule. An empty
+path identifies the root.
 
 ## Supported Draft 2020-12 rules
 
@@ -59,3 +46,16 @@ Admission checks the shape of every subschema. Unknown keywords such as
 literals representable as `uint64`. Each traversal has a depth and visit
 budget. Numeric comparisons that require a nonzero decimal exponent with
 more than 18 significant digits also yield `LimitExceeded`.
+
+The compiled-rule snapshot also has a depth and node budget. This bounds
+storage for value literals and annotations as well as nested rules.
+
+## Migration from v0.1.0
+
+The existing v0.1.0 tag retains the old JSON/YAML-dependent API. Applications
+moving to v0.2.0 can use `JsonSchema.Compile` or `YamlSchema.Compile`, then
+`Validate` on the corresponding adapter. To reuse a compiled rule across
+formats, pass `Compiled()` to the other adapter's `FromCompiled` method.
+
+Run the standalone suite with `nyrac test .`. The same suite exercises a
+reader without importing either codec.

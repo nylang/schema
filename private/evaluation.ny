@@ -4,7 +4,7 @@
 part of DocumentSchema;
 
 method(SchemaWalk) Evaluate(
-  value: Json, rule: Json, location: SchemaLocation, depth: int32
+  value: SchemaValue, rule: SchemaValue, location: SchemaLocation, depth: int32
 ) -> SchemaError? {
   let limit = self.Visit(location, depth);
   if limit != nil {
@@ -19,11 +19,11 @@ method(SchemaWalk) Evaluate(
     return nil;
   }
 
-  let rules = rule.AsObject() as JsonObject;
+  let rules = rule.AsObject() as SchemaValue;
   var i: int32 = 0;
   while i < rules.Len() {
-    let name = rules.KeyAt(i) as string;
-    let constraint = rules.ValueAt(i) as Json;
+    let name = rules.KeyAt(i);
+    let constraint = rules.ValueAt(i);
     let failure = self.ApplyKeyword(value, rules, name, constraint, location, depth);
     if failure != nil {
       return failure;
@@ -35,7 +35,7 @@ method(SchemaWalk) Evaluate(
 }
 
 method(SchemaWalk) ApplyKeyword(
-  value: Json, rules: JsonObject, name: string, constraint: Json,
+  value: SchemaValue, rules: SchemaValue, name: string, constraint: SchemaValue,
   location: SchemaLocation, depth: int32
 ) -> SchemaError? {
   let position = location.Rule(name);
@@ -45,21 +45,21 @@ method(SchemaWalk) ApplyKeyword(
     }
   } else if name == "$ref" {
     let reference = constraint.AsStr() as string;
-    let target = self.Definition(reference) as Json;
+    let target = self.Definition(reference) as SchemaValue;
     let target_location = SchemaLocation{instance: location.instance, rule: reference.Slice(1, reference.length)};
     return self.Evaluate(value, target, target_location, depth + 1);
   } else if name == "properties" || name == "required" || name == "additionalProperties" {
     let object = value.AsObject();
     if object != nil {
-      return self.ApplyObjectKeyword(object as JsonObject, rules, name, constraint, position, depth);
+      return self.ApplyObjectKeyword(object as SchemaValue, rules, name, constraint, position, depth);
     }
   } else if name == "items" {
     let array = value.AsArray();
     if array != nil {
-      let items = array as JsonArray;
+      let items = array as SchemaValue;
       var i: int32 = 0;
       while i < items.Len() {
-        let failure = self.Evaluate(items.Get(i) as Json, constraint, position.Instance(i.ToString()), depth + 1);
+        let failure = self.Evaluate(items.ValueAt(i), constraint, position.Instance(i.ToString()), depth + 1);
         if failure != nil {
           return failure;
         }
@@ -75,7 +75,7 @@ method(SchemaWalk) ApplyKeyword(
   } else if name == "enum" || name == "const" {
     return self.EvaluateValues(value, constraint, name, position, depth);
   } else if name == "allOf" || name == "anyOf" || name == "oneOf" {
-    return self.EvaluateBranches(value, constraint.AsArray() as JsonArray, name, position, depth);
+    return self.EvaluateBranches(value, constraint.AsArray() as SchemaValue, name, position, depth);
   } else if name == "not" {
     let outcome = self.Evaluate(value, constraint, position, depth + 1);
     if outcome == nil {
@@ -90,14 +90,14 @@ method(SchemaWalk) ApplyKeyword(
 }
 
 method(SchemaWalk) ApplyObjectKeyword(
-  value: JsonObject, rules: JsonObject, name: string, constraint: Json,
+  value: SchemaValue, rules: SchemaValue, name: string, constraint: SchemaValue,
   position: SchemaLocation, depth: int32
 ) -> SchemaError? {
   if name == "required" {
-    let keys = constraint.AsArray() as JsonArray;
+    let keys = constraint.AsArray() as SchemaValue;
     var i: int32 = 0;
     while i < keys.Len() {
-      let key = (keys.Get(i) as Json).AsStr() as string;
+      let key = (keys.ValueAt(i)).AsStr() as string;
       if value.Get(key) == nil {
         return position.Rule(i.ToString()).Instance(key).Error(
           SchemaErrorKind.Violation, "required property is missing"
@@ -106,14 +106,14 @@ method(SchemaWalk) ApplyObjectKeyword(
       i += 1;
     }
   } else if name == "properties" {
-    let properties = constraint.AsObject() as JsonObject;
+    let properties = constraint.AsObject() as SchemaValue;
     var i: int32 = 0;
     while i < properties.Len() {
-      let key = properties.KeyAt(i) as string;
+      let key = properties.KeyAt(i);
       let member = value.Get(key);
       if member != nil {
         let failure = self.Evaluate(
-          member as Json, properties.ValueAt(i) as Json, position.Rule(key).Instance(key), depth + 1
+          member as SchemaValue, properties.ValueAt(i), position.Rule(key).Instance(key), depth + 1
         );
         if failure != nil {
           return failure;
@@ -125,9 +125,9 @@ method(SchemaWalk) ApplyObjectKeyword(
     let properties = rules.Get("properties");
     var i: int32 = 0;
     while i < value.Len() {
-      let key = value.KeyAt(i) as string;
-      if properties == nil || ((properties as Json).AsObject() as JsonObject).Get(key) == nil {
-        let failure = self.Evaluate(value.ValueAt(i) as Json, constraint, position.Instance(key), depth + 1);
+      let key = value.KeyAt(i);
+      if properties == nil || ((properties as SchemaValue).AsObject() as SchemaValue).Get(key) == nil {
+        let failure = self.Evaluate(value.ValueAt(i), constraint, position.Instance(key), depth + 1);
         if failure != nil {
           return failure;
         }
@@ -140,12 +140,12 @@ method(SchemaWalk) ApplyObjectKeyword(
 }
 
 method(SchemaWalk) EvaluateBranches(
-  value: Json, children: JsonArray, keyword: string, position: SchemaLocation, depth: int32
+  value: SchemaValue, children: SchemaValue, keyword: string, position: SchemaLocation, depth: int32
 ) -> SchemaError? {
   var matched: bool = false;
   var i: int32 = 0;
   while i < children.Len() {
-    let outcome = self.Evaluate(value, children.Get(i) as Json, position.Rule(i.ToString()), depth + 1);
+    let outcome = self.Evaluate(value, children.ValueAt(i), position.Rule(i.ToString()), depth + 1);
     if outcome != nil {
       if keyword == "allOf" || (outcome as SchemaError).kind != SchemaErrorKind.Violation {
         return outcome;
@@ -170,20 +170,20 @@ method(SchemaWalk) EvaluateBranches(
 }
 
 // Bounds on container size and Unicode text length apply only to their own instance type.
-func check_size(value: Json, name: string, bound: uint64, position: SchemaLocation) -> SchemaError? {
+func check_size(value: SchemaValue, name: string, bound: uint64, position: SchemaLocation) -> SchemaError? {
   var length: int32 = 0;
   if name == "minItems" || name == "maxItems" {
     let array = value.AsArray();
     if array == nil {
       return nil;
     }
-    length = (array as JsonArray).Len();
+    length = (array as SchemaValue).Len();
   } else if name == "minProperties" || name == "maxProperties" {
     let object = value.AsObject();
     if object == nil {
       return nil;
     }
-    length = (object as JsonObject).Len();
+    length = (object as SchemaValue).Len();
   } else {
     let text = value.AsStr();
     if text == nil {
@@ -204,16 +204,16 @@ func check_size(value: Json, name: string, bound: uint64, position: SchemaLocati
   return nil;
 }
 
-func matches_type(value: Json, rule: Json) -> bool {
+func matches_type(value: SchemaValue, rule: SchemaValue) -> bool {
   let name = rule.AsStr();
   if name != nil {
     return matches_type_name(value, name as string);
   }
 
-  let choices = rule.AsArray() as JsonArray;
+  let choices = rule.AsArray() as SchemaValue;
   var i: int32 = 0;
   while i < choices.Len() {
-    if matches_type_name(value, (choices.Get(i) as Json).AsStr() as string) {
+    if matches_type_name(value, (choices.ValueAt(i)).AsStr() as string) {
       return true;
     }
     i += 1;
@@ -222,9 +222,9 @@ func matches_type(value: Json, rule: Json) -> bool {
   return false;
 }
 
-func matches_type_name(value: Json, name: string) -> bool {
+func matches_type_name(value: SchemaValue, name: string) -> bool {
   if name == "null" {
-    return value.IsNull();
+    return value.Kind() == SchemaKind.Null;
   }
   if name == "boolean" {
     return value.AsBool() != nil;
@@ -238,10 +238,6 @@ func matches_type_name(value: Json, name: string) -> bool {
   if name == "string" {
     return value.AsStr() != nil;
   }
-  if value.AsInt() != nil || value.AsUInt64() != nil {
-    return true;
-  }
-
   let raw = value.AsNumber();
   return raw != nil && (name == "number" || is_integer_lexeme(raw as string));
 }

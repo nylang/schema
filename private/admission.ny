@@ -3,7 +3,7 @@
 
 part of DocumentSchema;
 
-method(SchemaWalk) Admit(rule: Json, location: SchemaLocation, depth: int32) -> SchemaError? {
+method(SchemaWalk) Admit(rule: SchemaValue, location: SchemaLocation, depth: int32) -> SchemaError? {
   let limit = self.Visit(location, depth);
   if limit != nil {
     return limit;
@@ -18,11 +18,11 @@ method(SchemaWalk) Admit(rule: Json, location: SchemaLocation, depth: int32) -> 
     return location.Error(SchemaErrorKind.InvalidSchema, "expected an object or boolean schema");
   }
 
-  let entries = object as JsonObject;
+  let entries = object as SchemaValue;
   var i: int32 = 0;
   while i < entries.Len() {
-    let name = entries.KeyAt(i) as string;
-    let child = entries.ValueAt(i) as Json;
+    let name = entries.KeyAt(i);
+    let child = entries.ValueAt(i);
     let failure = self.AdmitKeyword(name, child, location.Rule(name), depth);
     if failure != nil {
       return failure;
@@ -34,7 +34,7 @@ method(SchemaWalk) Admit(rule: Json, location: SchemaLocation, depth: int32) -> 
 }
 
 method(SchemaWalk) AdmitKeyword(
-  name: string, rule: Json, location: SchemaLocation, depth: int32
+  name: string, rule: SchemaValue, location: SchemaLocation, depth: int32
 ) -> SchemaError? {
   if name == "$schema" {
     let dialect = rule.AsStr();
@@ -61,11 +61,11 @@ method(SchemaWalk) AdmitKeyword(
     if entries == nil {
       return location.Error(SchemaErrorKind.InvalidSchema, "expected an object of schemas");
     }
-    let members = entries as JsonObject;
+    let members = entries as SchemaValue;
     var i: int32 = 0;
     while i < members.Len() {
-      let key = members.KeyAt(i) as string;
-      let failure = self.Admit(members.ValueAt(i) as Json, location.Rule(key), depth + 1);
+      let key = members.KeyAt(i);
+      let failure = self.Admit(members.ValueAt(i), location.Rule(key), depth + 1);
       if failure != nil {
         return failure;
       }
@@ -75,13 +75,13 @@ method(SchemaWalk) AdmitKeyword(
     return self.Admit(rule, location, depth + 1);
   } else if name == "allOf" || name == "anyOf" || name == "oneOf" {
     let array = rule.AsArray();
-    if array == nil || (array as JsonArray).Len() == 0 {
+    if array == nil || (array as SchemaValue).Len() == 0 {
       return location.Error(SchemaErrorKind.InvalidSchema, "expected a nonempty array of schemas");
     }
-    let children = array as JsonArray;
+    let children = array as SchemaValue;
     var i: int32 = 0;
     while i < children.Len() {
-      let failure = self.Admit(children.Get(i) as Json, location.Rule(i.ToString()), depth + 1);
+      let failure = self.Admit(children.ValueAt(i), location.Rule(i.ToString()), depth + 1);
       if failure != nil {
         return failure;
       }
@@ -91,7 +91,7 @@ method(SchemaWalk) AdmitKeyword(
     return self.AdmitNames(name, rule, location);
   } else if name == "enum" {
     let choices = rule.AsArray();
-    if choices == nil || (choices as JsonArray).Len() == 0 {
+    if choices == nil || (choices as SchemaValue).Len() == 0 {
       return location.Error(SchemaErrorKind.InvalidSchema, "expected a nonempty array of values");
     }
   } else if name == "minimum" || name == "maximum" || name == "exclusiveMinimum" ||
@@ -115,7 +115,7 @@ method(SchemaWalk) AdmitKeyword(
   return nil;
 }
 
-method(SchemaWalk) AdmitNames(keyword: string, rule: Json, location: SchemaLocation) -> SchemaError? {
+method(SchemaWalk) AdmitNames(keyword: string, rule: SchemaValue, location: SchemaLocation) -> SchemaError? {
   let is_type = keyword == "type";
   let name = rule.AsStr();
   if is_type && name != nil {
@@ -130,7 +130,7 @@ method(SchemaWalk) AdmitNames(keyword: string, rule: Json, location: SchemaLocat
     return location.Error(SchemaErrorKind.InvalidSchema, "expected an array of names");
   }
 
-  let names = list as JsonArray;
+  let names = list as SchemaValue;
   if is_type && names.Len() == 0 {
     return location.Error(SchemaErrorKind.InvalidSchema, "type array must be nonempty");
   }
@@ -138,7 +138,7 @@ method(SchemaWalk) AdmitNames(keyword: string, rule: Json, location: SchemaLocat
   var seen = HashMap<string, int32>.New();
   var i: int32 = 0;
   while i < names.Len() {
-    let entry = (names.Get(i) as Json).AsStr();
+    let entry = (names.ValueAt(i)).AsStr();
     let position = location.Rule(i.ToString());
     if entry == nil || (is_type && !is_type_name(entry as string)) {
       return position.Error(SchemaErrorKind.InvalidSchema, "invalid name");
