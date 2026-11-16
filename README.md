@@ -23,6 +23,18 @@ paths. `instance_path` identifies the failing value or the expected location
 of a missing property. `schema_path` identifies the applicable rule. An empty
 path identifies the root.
 
+## Scalar constraints for other schema dialects
+
+Import `schema:scalar.ny` for exact decimal ordering and scalar bounds. A
+format admits and normalizes its own values before creating a `SchemaDecimal`.
+JSON-compatible numbers supply significant digits and a decimal point position.
+XSD decimals and integers supply their normalized integral and fractional
+parts. Both use the same comparison, including comparisons of signed zero and
+equivalent spellings with trailing zeroes.
+
+`SchemaBound` checks an ordering or a size supplied by the caller. The caller
+selects the units, applies whitespace and type rules, and owns its diagnostics.
+
 ## Supported Draft 2020-12 rules
 
 - Boolean schemas, `type` and type unions.

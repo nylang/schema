@@ -4,6 +4,22 @@
 import "stdlib:stdlib.ny";
 import "ntest:ntest.ny";
 import "schema.ny";
+import "scalar.ny";
+
+@test
+func test_scalar_decimal_representation_is_independent_of_serialization() {
+  let fixed = SchemaDecimal.FromParts("", "000120");
+  let scientific = SchemaDecimal.FromDigits("12", -3i64);
+  AssertEqI32(fixed.Compare(scientific), 0);
+  let zero = SchemaDecimal.FromParts("", "000", negative: true);
+  AssertEqI32(zero.Compare(SchemaDecimal.FromDigits("", 0i64)), 0);
+
+  let left = SchemaDecimal.FromParts("12345678901234567890", "00001", negative: true);
+  let right = SchemaDecimal.FromParts("12345678901234567890", "00002", negative: true);
+  AssertTrue(left.Compare(right) > 0);
+  let whole = SchemaDecimal.FromParts("12", "30");
+  AssertEqI32(whole.Compare(SchemaDecimal.FromDigits("123", 2i64)), 0);
+}
 
 struct TestMember {
   key: string;

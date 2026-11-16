@@ -11,6 +11,7 @@ part "reader.ny";
 part "rules.ny";
 import "stdlib:stdlib.ny";
 import "interface/schema.ni";
+import "scalar.ny";
 
 /** @brief An admitted document schema. */
 pub struct Schema {

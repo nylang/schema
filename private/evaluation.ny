@@ -197,7 +197,8 @@ func check_size(value: SchemaValue, name: string, bound: uint64, position: Schem
   }
 
   let size = length as uint64;
-  if (name.StartsWith("min") && size < bound) || (name.StartsWith("max") && size > bound) {
+  let predicate = name.StartsWith("min") ? SchemaBound.AtLeast : SchemaBound.AtMost;
+  if !predicate.AllowsSize(size, bound) {
     return position.Error(SchemaErrorKind.Violation, "value size is outside the allowed bound");
   }
 

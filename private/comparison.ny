@@ -3,13 +3,7 @@
 
 part of DocumentSchema;
 
-// Decimal order counts the digits before the point after leading zeros are removed.
-struct SchemaDecimal {
-  sign: int32;
-  order: int64;
-  digits: string;
-}
-
+// JSON number readers have already admitted the lexical form and its exponent.
 static method(SchemaDecimal) Parse(raw: string) -> SchemaDecimal? {
   let negative = raw.ByteAt(0) == 45;
   var i: int32 = negative ? 1 : 0;
@@ -63,34 +57,8 @@ static method(SchemaDecimal) Parse(raw: string) -> SchemaDecimal? {
     }
   }
 
-  return SchemaDecimal{
-    sign: negative ? -1 : 1, order: exponent + (whole as int64) - (leading as int64), digits: digits.Take()
-  };
-}
-
-method(SchemaDecimal) Compare(other: ref SchemaDecimal) -> int32 {
-  if self.sign != other.sign {
-    return self.sign < other.sign ? -1 : 1;
-  }
-  if self.sign == 0 {
-    return 0;
-  }
-  if self.order != other.order {
-    return self.order < other.order ? -self.sign : self.sign;
-  }
-
-  // Decimal spellings can differ only in their right-side zero padding.
-  var i: int32 = 0;
-  while i < self.digits.length || i < other.digits.length {
-    let a = self.digits.ByteAtOr(i, 48);
-    let b = other.digits.ByteAtOr(i, 48);
-    if a != b {
-      return a < b ? -self.sign : self.sign;
-    }
-    i += 1;
-  }
-
-  return 0;
+  return SchemaDecimal.FromDigits(digits.Take(), exponent + (whole as int64) - (leading as int64),
+    negative: negative);
 }
 
 method(SchemaWalk) Equal(
@@ -254,8 +222,10 @@ func check_numeric_bound(
   }
 
   let order = result.get_if<int32>() as int32;
-  if (name == "minimum" && order < 0) || (name == "maximum" && order > 0) ||
-      (name == "exclusiveMinimum" && order <= 0) || (name == "exclusiveMaximum" && order >= 0) {
+  let bound = name == "minimum" ? SchemaBound.AtLeast :
+    (name == "maximum" ? SchemaBound.AtMost :
+      (name == "exclusiveMinimum" ? SchemaBound.GreaterThan : SchemaBound.LessThan));
+  if !bound.AllowsOrder(order) {
     return position.Error(SchemaErrorKind.Violation, "number is outside the allowed bound");
   }
 
